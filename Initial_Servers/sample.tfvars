@@ -1,0 +1,1 @@
+duckdns_token = "change_me"

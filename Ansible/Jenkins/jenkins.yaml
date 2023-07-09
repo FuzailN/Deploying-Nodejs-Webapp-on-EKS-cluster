@@ -1,0 +1,129 @@
+---
+- name: wait for ssh port to be available
+  hosts: server_jenkins
+  tasks:
+    - name: ensure ssh port is open
+      wait_for:
+        port: 22
+        host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+        search_regex: OpenSSH
+        delay: 10
+        timeout: 100
+      vars:
+        ansible_connection: local
+
+- name: Download and import Jenkins, Terraform, Java and Ansible
+  hosts: server_jenkins
+  become: true
+  tasks:
+    - name: Add the Jenkins repo
+      get_url:
+        url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+        dest: /etc/yum.repos.d/jenkins.repo
+
+    - name: Import Jenkins key 
+      rpm_key:    
+        key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+        state: present
+
+    - name: Add terraform repository
+      shell: yum-config-manager --add-repo=https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+      args:
+        creates: /etc/yum.repos.d/hashicorp.repo
+
+    - name: enable Java and ansible
+      command: amazon-linux-extras enable ansible2 java-openjdk11
+
+- name: Install Jenkins, Terraform, Java, Ansible and Docker
+  hosts: server_jenkins
+  become: true
+  tasks:
+    - name: Install Jenkins, Terraform, Java, Ansible and updating yum
+      vars:
+        ansible_python_interpreter: /usr/bin/python
+      yum: 
+        name: 
+          - java-11-openjdk
+          - terraform
+          - ansible
+          - jenkins
+          - python3
+          - docker
+        update_cache: yes
+        state: present
+
+    - name: Make sure Jenkins is running
+      systemd:
+        daemon_reload: true
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Checking jenkins status
+      shell: ps aux | grep jenkins
+      register: app_status
+    - debug: msg={{app_status.stdout_lines}}
+
+- name: Download and Install awscli and kubectl
+  hosts: server_jenkins
+  become: true
+  tasks:
+    - name: Download awscli
+      get_url: 
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /opt/awscliv2.zip
+      register: download_output
+
+    - name: unpack awscli
+      unarchive:
+        src: "{{download_output.dest}}"
+        dest: /opt/
+        remote_src: yes
+
+    - name: check aws folder stat
+      stat:
+        path: /usr/local/bin/aws
+      register: aws_stat
+
+    - name: install awscli 
+      shell: /opt/aws/install
+      when: not aws_stat.stat.exists
+
+    - name: Download kubectl
+      get_url: 
+        url: https://dl.k8s.io/release/v1.24.0/bin/linux/amd64/kubectl
+        dest: /usr/local/bin/kubectl
+        mode: +x
+
+- name: add ec2-user to docker group and reset connection
+  hosts: server_jenkins
+  become: true
+  tasks:
+    - name: start docker daemon
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: reset connection
+      meta: reset_connection
+      
+- name: restart Docker service
+  hosts: server_jenkins
+  become: true
+  tasks:
+    - name: restart Docker service
+      systemd:
+        name: docker 
+        state: restarted
+
+    - name: Set permissions on docker.socket
+      file:
+        path: /var/run/docker.sock
+        mode: '0666'

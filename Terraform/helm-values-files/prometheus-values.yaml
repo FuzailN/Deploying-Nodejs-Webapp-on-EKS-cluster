@@ -1,0 +1,20 @@
+defaultRules:
+  rules:
+    etcd: false              
+kubeControllerManager:  
+  enabled: false
+kubeEtcd:               
+  enabled: false
+kubeScheduler:          
+  enabled: false
+prometheus:
+  prometheusSpec:
+    serviceMonitorNamespaceSelector:
+      matchLabels:
+        release: prometheus
+    ruleNamespaceSelector:
+      matchLabels:
+        release: prometheus
+
+grafana:
+  adminPassword: grafana  

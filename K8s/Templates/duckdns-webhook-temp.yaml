@@ -1,0 +1,10 @@
+duckdns:
+  token: "$DUCKDNS_TOKEN"
+
+clusterIssuer:
+  email: $DUCKDNS_EMAIL
+  staging:
+    create: true
+  production:
+    create: true
+

@@ -1,0 +1,71 @@
+---
+- name: wait for ssh port to be available
+  hosts: server_nginx
+  tasks:
+    - name: ensure ssh port is open
+      wait_for:
+        port: 22
+        host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+        search_regex: OpenSSH
+        delay: 10
+        timeout: 100
+      vars:
+        ansible_connection: local
+
+- name: Install nginx and cert-bot
+  hosts: server_nginx
+  become: true
+  tasks:
+    - name: enable nginx and epel
+      command: amazon-linux-extras enable nginx1 epel
+
+    - name: install nginx and epel
+      vars:
+        ansible_python_interpreter: /usr/bin/python
+      yum:
+        update_cache: yes
+        name: 
+          - nginx
+          - epel-release
+
+    - name: install certbot
+      vars:
+        ansible_python_interpreter: /usr/bin/python
+      yum:
+        update_cache: yes
+        name: 
+          - certbot
+          - python-certbot-nginx
+      
+    - name: Make sure nginx is running
+      systemd:
+        daemon_reload: true
+        name: nginx
+        state: started
+        enabled: true
+
+- name: Create a certificate using cert-bot and copy nginx configuration file
+  hosts: server_nginx
+  become: true
+  tasks:
+    - name: create certificate for nginx domain
+      command: certbot --nginx -d nginx-proxy.duckdns.org -d www.nginx-proxy.duckdns.org --register-unsafely-without-email --agree-tos --force-renewal
+      ignore_errors: true
+      
+    - name: wait for 1 minute
+      pause:
+        minutes: 1
+
+    - name: copy nginx configuration file
+      copy:
+        src: ./nginx.conf
+        dest: /etc/nginx/nginx.conf
+
+    - name: check if configuration is valid
+      command: nginx -t
+
+    - name: restart nginx service
+      systemd:
+        name: nginx 
+        state: restarted
+

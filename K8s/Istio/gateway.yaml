@@ -1,0 +1,25 @@
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: knote-gateway
+  namespace: application
+spec:
+  selector:
+    istio: gateway 
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - knote-cluster.duckdns.org
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - knote-cluster.duckdns.org
+      tls:
+        credentialName: knote-cluster.duckdns.org-tls-secret-production
+        mode: SIMPLE

@@ -1,0 +1,119 @@
+---
+- name: wait for ssh port to be available
+  hosts: server_nexus
+  tasks:
+    - name: ensure ssh port is open
+      wait_for:
+        port: 22
+        host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+        search_regex: OpenSSH
+        delay: 10
+        timeout: 100
+      vars:
+        ansible_connection: local
+
+- name: Install java and net-tools
+  hosts: server_nexus
+  become: true
+  tasks:
+    - name: install Java 8
+      vars:
+        ansible_python_interpreter: /usr/bin/python
+      yum:
+        name: java-1.8.0-openjdk.x86_64 
+        update_cache: yes
+        state: present
+
+- name: Download and unpack nexus
+  hosts: server_nexus
+  become: true  
+  tasks:
+    - name: Download nexus3
+      get_url: 
+        url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+        dest: /opt/
+      register: download_output
+
+    - name: unpack nexus
+      unarchive:
+        src: "{{download_output.dest}}"
+        dest: /opt/
+        remote_src: yes
+
+    - name: Find nexus folder
+      find:
+        paths: /opt
+        pattern: "nexus-*"
+        file_type: directory
+      register: nexus_folder
+
+    - name: check nexus folder stat
+      stat:
+        path: /opt/nexus
+      register: nexus_stat
+      
+    - name: rename nexus folder
+      shell: mv {{nexus_folder.files[0].path}} /opt/nexus
+      when: not nexus_stat.stat.exists
+
+- name: create nexus user and make it own nexus folder
+  hosts: server_nexus
+  become: true 
+  tasks:
+    - name: make sure nexus group exists
+      group:
+        name: nexus
+        state: present
+    
+    - name: create nexus user
+      user:
+        name: nexus
+        group: nexus
+
+    - name: make nexus user owner of nexus folder
+      file:
+        path: /opt/nexus
+        state: directory
+        owner: nexus
+        group: nexus
+        recurse: true
+
+    - name: make nexus user owner of sonetype folder
+      file:
+        path: /opt/sonatype-work
+        state: directory
+        owner: nexus
+        group: nexus
+        recurse: true
+
+- name: start nexus with nexus user
+  hosts: server_nexus
+  become: true
+  become_user: nexus
+  tasks:
+    - name: set run_as_user nexus
+      lineinfile:
+        path: /opt/nexus/bin/nexus.rc
+        regexp: '^#run_as_user=""'
+        line: run_as_user="nexus"
+
+    - name: start nexus
+      command: /opt/nexus/bin/nexus start
+
+- name: verify nexus is running
+  hosts: server_nexus
+  become: true 
+  tasks:
+    - name: check with ps
+      shell: ps aux | grep nexus
+      register: app_status
+    - debug: "msg={{app_status.stdout_lines}}"
+
+    - name: wait for 1 minute
+      pause:
+        minutes: 1
+
+    - name: check with netstat
+      shell: netstat -plnt
+      register: app_status
+    - debug: "msg={{app_status.stdout_lines}}"

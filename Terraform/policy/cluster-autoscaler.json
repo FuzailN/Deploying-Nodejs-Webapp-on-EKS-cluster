@@ -1,0 +1,19 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Action": [
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeAutoScalingGroups",
+          "ec2:DescribeLaunchTemplateVersions",
+          "autoscaling:DescribeTags",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+          "ec2:DescribeInstanceTypes"
+        ],
+        "Effect": "Allow",
+        "Resource": "*"
+      }
+    ]  
+}
